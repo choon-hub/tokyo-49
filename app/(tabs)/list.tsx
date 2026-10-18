@@ -3,16 +3,27 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ConquestCount } from "../../src/components/ConquestCount";
 import { MUNICIPALITIES } from "../../src/data/municipalities";
+import { useTheme } from "../../theme/use-theme";
 
 export default function List() {
+  const theme = useTheme();
   return (
-    <SafeAreaView edges={["top"]} style={styles.container} testID="list-screen">
+    <SafeAreaView
+      edges={["top"]}
+      style={[styles.container, { backgroundColor: theme.background }]}
+      testID="list-screen"
+    >
       {/* 訪問済みの数は #5 で訪問データから求める。ここでは 0 のまま */}
       <ConquestCount visited={0} total={MUNICIPALITIES.length} />
       <ScrollView>
         {MUNICIPALITIES.map((municipality) => (
-          <View key={municipality.code} style={styles.row}>
-            <Text style={styles.name}>{municipality.name}</Text>
+          <View
+            key={municipality.code}
+            style={[styles.row, { borderBottomColor: theme.border }]}
+          >
+            <Text style={[styles.name, { color: theme.text }]}>
+              {municipality.name}
+            </Text>
           </View>
         ))}
       </ScrollView>
@@ -28,7 +39,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#CCCCCC",
   },
   name: {
     fontSize: 16,

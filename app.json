@@ -4,6 +4,7 @@
     "slug": "tokyo-49",
     "version": "1.0.0",
     "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/images/icon.png",
     "scheme": "tokyo49",
     "platforms": ["android"],
@@ -24,7 +25,10 @@
         {
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#0F1417"
+          }
         }
       ]
     ],
