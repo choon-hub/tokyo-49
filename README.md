@@ -47,7 +47,9 @@ npm install
 | `npm start` | 開発サーバーを起動（`expo start`） |
 | `npm run android` | 開発ビルドを作成して Android 端末で起動（`expo run:android`） |
 | `npm run typecheck` | 型チェック（`tsc --noEmit`） |
+| `npm run lint` | ESLint による静的解析（`expo lint`） |
 | `npm test` | テスト実行（Jest / jest-expo） |
+| `npm run check` | typecheck → lint → test を順に実行（CI と同じ。変更後は必ず通す） |
 
 ## 構成
 
