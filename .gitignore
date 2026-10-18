@@ -43,4 +43,5 @@ coverage/
 
 # Claude Code（個人設定）
 .claude/settings.local.json
+.claude/worktrees/
 CLAUDE.local.md
