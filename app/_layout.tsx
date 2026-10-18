@@ -1,5 +1,18 @@
-import { Stack } from "expo-router";
+import { Stack, ThemeProvider } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useColorScheme } from "react-native";
+
+import {
+  darkNavigationTheme,
+  lightNavigationTheme,
+} from "../theme/navigation-theme";
 
 export default function RootLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  const dark = useColorScheme() === "dark";
+  return (
+    <ThemeProvider value={dark ? darkNavigationTheme : lightNavigationTheme}>
+      <StatusBar style="auto" />
+      <Stack screenOptions={{ headerShown: false }} />
+    </ThemeProvider>
+  );
 }
