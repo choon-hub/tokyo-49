@@ -40,6 +40,27 @@ npm install
 
 起動すると、縦固定の空のホーム画面が表示される。端末を横に倒しても回転しない。
 
+## 実機・エミュレータでの確認
+
+土台（#34）の確認項目。実機・エミュレータでの確認は人が行う。
+
+- ランチャーのアプリ名が「tokyo-49」で、起動するとホーム画面が出る
+- 端末を横に倒しても画面が回転しない
+- 存在しないパスを開くと、日本語の「ページが見つかりません」が出て、「ホームへ戻る」でホームに戻れる
+
+  ```bash
+  adb shell am start -a android.intent.action.VIEW -d tokyo49://foo
+  ```
+
+- 機内モードでも起動してホーム画面が出る。開発ビルドは Metro に接続するため、Metro に依存しない release バリアントで確認する
+
+  ```bash
+  npx expo run:android --variant release
+  ```
+
+  インストール後、端末を機内モードにしてからアプリを起動し直す。
+  release バリアントは prebuild 既定のデバッグ署名で動く。正式な署名鍵は #29 で扱う。
+
 ## スクリプト
 
 | コマンド | 内容 |
@@ -54,7 +75,7 @@ npm install
 ## 構成
 
 ```
-app/            Expo Router のルート（app/index.tsx がホーム画面）
+app/            Expo Router のルート（app/index.tsx がホーム画面、app/+not-found.tsx が未マッチ画面）
 assets/images/  アイコン・スプラッシュ画像
 __tests__/      テスト
 ```
