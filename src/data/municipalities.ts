@@ -67,3 +67,10 @@ export const MUNICIPALITIES: readonly Municipality[] = [
   { code: "13228", name: "あきる野市", kana: "あきるのし", type: "city" },
   { code: "13229", name: "西東京市", kana: "にしとうきょうし", type: "city" },
 ];
+
+/** 区市コードから区市を引く。マスタにないコードは undefined。 */
+export function findMunicipalityByCode(
+  code: string,
+): Municipality | undefined {
+  return MUNICIPALITIES.find((m) => m.code === code);
+}

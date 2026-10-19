@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ConquestCount } from "../../src/components/ConquestCount";
+import { RecordVisitButton } from "../../src/components/RecordVisitButton";
 import { MUNICIPALITIES } from "../../src/data/municipalities";
 import { useTheme } from "../../theme/use-theme";
 
@@ -27,6 +28,7 @@ export default function List() {
           </View>
         ))}
       </ScrollView>
+      <RecordVisitButton />
     </SafeAreaView>
   );
 }
