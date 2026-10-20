@@ -1,4 +1,7 @@
-import { MUNICIPALITIES } from "../src/data/municipalities";
+import {
+  findMunicipalityByCode,
+  MUNICIPALITIES,
+} from "../src/data/municipalities";
 
 // 要件の49区市（23区＋26市）。マスタとは別に、総務省の全国地方公共団体コードから
 // 書き起こした期待値。マスタの誤字・コード違いを検出するために独立して持つ。
@@ -113,4 +116,20 @@ describe("区市マスタ", () => {
   it("コードと名称の組が、要件の49区市と完全に一致する", () => {
     expect(MUNICIPALITIES.map((m) => [m.code, m.name])).toEqual(EXPECTED);
   });
+});
+
+describe("findMunicipalityByCode", () => {
+  it("マスタにあるコードなら、その区市を返す", () => {
+    expect(findMunicipalityByCode("13104")).toEqual(
+      expect.objectContaining({ code: "13104", name: "新宿区" }),
+    );
+    expect(findMunicipalityByCode("13229")?.name).toBe("西東京市");
+  });
+
+  it.each(["13301", "13100", "1310", "", "13104 "])(
+    "マスタにないコード %p は undefined",
+    (code) => {
+      expect(findMunicipalityByCode(code)).toBeUndefined();
+    },
+  );
 });

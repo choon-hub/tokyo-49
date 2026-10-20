@@ -30,7 +30,9 @@
             "backgroundColor": "#0F1417"
           }
         }
-      ]
+      ],
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
