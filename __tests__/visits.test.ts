@@ -1,5 +1,10 @@
 import { migrateUserDb } from "../src/db/user-db";
-import { addVisit, listVisits, type NewVisit } from "../src/db/visits";
+import {
+  addVisit,
+  countVisitsByMunicipality,
+  listVisits,
+  type NewVisit,
+} from "../src/db/visits";
 import { openTestDatabase } from "../test-utils/node-sqlite";
 
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -149,5 +154,78 @@ describe("listVisits", () => {
       createdAt: expect.stringMatching(ISO_UTC),
       updatedAt: expect.stringMatching(ISO_UTC),
     });
+  });
+});
+
+describe("countVisitsByMunicipality", () => {
+  const nishitokyo: NewVisit = {
+    ...shinjuku,
+    municipalityCode: "13229",
+    placeName: "西東京市",
+  };
+
+  it("訪問がなければ空の結果", async () => {
+    const { db } = await setup();
+    expect(await countVisitsByMunicipality(db)).toEqual([]);
+  });
+
+  it("同じ区市に複数行あると、その行数を1件の結果にまとめる", async () => {
+    const { db } = await setup();
+    await addVisit(db, shinjuku);
+    await addVisit(db, { ...shinjuku, visitedOn: "2026-10-01" });
+    await addVisit(db, { ...shinjuku, memo: null });
+
+    expect(await countVisitsByMunicipality(db)).toEqual([
+      { municipalityCode: "13104", visitCount: 3 },
+    ]);
+  });
+
+  it("複数の区市は別々に数え、区市コードの昇順で返す", async () => {
+    const { db } = await setup();
+    await addVisit(db, nishitokyo);
+    await addVisit(db, shinjuku);
+    await addVisit(db, nishitokyo);
+
+    expect(await countVisitsByMunicipality(db)).toEqual([
+      { municipalityCode: "13104", visitCount: 1 },
+      { municipalityCode: "13229", visitCount: 2 },
+    ]);
+  });
+
+  it("ある区市の行を全部消すと、その区市は結果から消える（他の区市は残る）", async () => {
+    const { db, raw } = await setup();
+    await addVisit(db, shinjuku);
+    await addVisit(db, shinjuku);
+    await addVisit(db, nishitokyo);
+
+    raw.prepare("DELETE FROM visits WHERE municipality_code = ?").run("13104");
+
+    expect(await countVisitsByMunicipality(db)).toEqual([
+      { municipalityCode: "13229", visitCount: 1 },
+    ]);
+  });
+
+  it("訪問日が未来の行も数える", async () => {
+    const { db } = await setup();
+    await addVisit(db, { ...shinjuku, visitedOn: "2099-12-31" });
+
+    expect(await countVisitsByMunicipality(db)).toEqual([
+      { municipalityCode: "13104", visitCount: 1 },
+    ]);
+  });
+
+  it("マスタにないコードの行もそのまま返す（突き合わせは呼び出し側）", async () => {
+    const { db, raw } = await setup();
+    raw
+      .prepare(
+        `INSERT INTO visits
+  (place_name, municipality_code, source, ref_id, visited_on, memo, created_at, updated_at)
+VALUES ('不明', '13301', 'manual', NULL, '2026-10-18', NULL, 'x', 'x')`,
+      )
+      .run();
+
+    expect(await countVisitsByMunicipality(db)).toEqual([
+      { municipalityCode: "13301", visitCount: 1 },
+    ]);
   });
 });

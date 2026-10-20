@@ -8,10 +8,11 @@ import {
 } from "expo-router/testing-library";
 
 import { MUNICIPALITIES } from "../src/data/municipalities";
-import { addVisit } from "../src/db/visits";
+import { addVisit, countVisitsByMunicipality } from "../src/db/visits";
 
 jest.mock("../src/db/visits", () => ({
   addVisit: jest.fn(),
+  countVisitsByMunicipality: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => ({
@@ -19,6 +20,7 @@ jest.mock("@react-native-community/datetimepicker", () => ({
 }));
 
 const mockAddVisit = jest.mocked(addVisit);
+const mockCount = jest.mocked(countVisitsByMunicipality);
 const mockOpenPicker = jest.mocked(DateTimePickerAndroid.open);
 
 // 時計は JST 2026-10-18 0:30（UTC では前日の 15:30）に固定する。
@@ -28,6 +30,8 @@ beforeEach(() => {
   jest.useFakeTimers({ now: NOW });
   mockAddVisit.mockReset();
   mockAddVisit.mockResolvedValue(1);
+  mockCount.mockReset();
+  mockCount.mockResolvedValue([]);
   mockOpenPicker.mockReset();
 });
 
@@ -149,6 +153,24 @@ describe("保存", () => {
       source: "manual",
       placeName: "西東京市",
     });
+  });
+
+  it("一覧から保存して戻ると、再起動しなくてもチェックと制覇数が更新される", async () => {
+    // 保存前は未訪問、保存後の集計は西東京市が1件
+    mockCount
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ municipalityCode: "13229", visitCount: 1 }]);
+    await openFromHome("/list");
+    expect(mockCount).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByRole("radio", { name: "西東京市" }));
+    fireEvent.press(saveButton());
+
+    expect(await screen.findByText("1 / 49")).toBeTruthy();
+    expect(mockCount).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText("西東京市 訪問済み")).toBeTruthy();
+    expect(screen.getByLabelText("千代田区 未訪問")).toBeTruthy();
+    expect(screen.getAllByText("✓")).toHaveLength(1);
   });
 
   it("メモが空のままでも保存できる", async () => {

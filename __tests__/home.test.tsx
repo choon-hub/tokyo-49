@@ -1,5 +1,10 @@
 import { fireEvent, renderRouter, screen } from "expo-router/testing-library";
 
+// 一覧タブが開くと訪問の集計を読むので、DB には触れさせない。
+jest.mock("../src/db/visits", () => ({
+  countVisitsByMunicipality: jest.fn().mockResolvedValue([]),
+}));
+
 describe("ホーム（タブ）", () => {
   it("地図タブが選ばれた状態で始まり、「地図」「一覧」の2つのタブがある", async () => {
     const { getPathname } = renderRouter("./app");
