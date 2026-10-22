@@ -124,6 +124,23 @@ describe("addVisit", () => {
       expect(allRows(raw)).toHaveLength(0);
     },
   );
+
+  it.each([
+    ["空文字", ""],
+    ["空白だけ", "  \n\t　"],
+  ])("場所名が%sなら拒否し、行を追加しない", async (_label, placeName) => {
+    const { db, raw } = await setup();
+    await expect(addVisit(db, { ...shinjuku, placeName })).rejects.toThrow(
+      "場所名が空",
+    );
+    expect(allRows(raw)).toHaveLength(0);
+  });
+
+  it("区市名以外の場所名もそのまま保存する", async () => {
+    const { db, raw } = await setup();
+    await addVisit(db, { ...shinjuku, placeName: "新宿御苑" });
+    expect(allRows(raw)[0].place_name).toBe("新宿御苑");
+  });
 });
 
 describe("listVisits", () => {

@@ -58,6 +58,9 @@ export async function addVisit(
   if (!isValidDateString(input.visitedOn)) {
     throw new Error(`訪問日の形式が正しくありません: ${input.visitedOn}`);
   }
+  if (input.placeName.trim() === "") {
+    throw new Error("場所名が空です");
+  }
   const now = new Date().toISOString();
   const result = await db.runAsync(
     `INSERT INTO visits

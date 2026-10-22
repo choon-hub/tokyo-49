@@ -1,27 +1,17 @@
-import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { useRef, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MemoField } from "../../src/components/MemoField";
+import { VisitDateField } from "../../src/components/VisitDateField";
 import {
   MUNICIPALITIES,
   type Municipality,
 } from "../../src/data/municipalities";
 import { addVisit } from "../../src/db/visits";
-import {
-  formatJapaneseDate,
-  parseLocalDate,
-  toLocalDateString,
-} from "../../src/lib/date";
+import { toLocalDateString } from "../../src/lib/date";
 import { useTheme } from "../../theme/use-theme";
 
 // 訪問入力画面。いまは区市の直接選択だけ。
@@ -40,18 +30,6 @@ export default function NewVisit() {
   const [saveFailed, setSaveFailed] = useState(false);
   // state の更新は次の描画まで反映されないので、連打は ref で止める。
   const savingRef = useRef(false);
-
-  const openDatePicker = () => {
-    DateTimePickerAndroid.open({
-      value: parseLocalDate(visitedOn),
-      mode: "date",
-      onChange: (event, date) => {
-        if (event.type === "set" && date) {
-          setVisitedOn(toLocalDateString(date));
-        }
-      },
-    });
-  };
 
   const save = async () => {
     if (!municipality || savingRef.current) return;
@@ -84,9 +62,7 @@ export default function NewVisit() {
       testID="visit-new-screen"
     >
       <View style={styles.form}>
-        <Text style={[styles.label, { color: theme.textSecondary }]}>
-          区市
-        </Text>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>区市</Text>
         <Text
           style={[
             styles.value,
@@ -97,36 +73,8 @@ export default function NewVisit() {
           {municipality ? municipality.name : "下の一覧から選んでください"}
         </Text>
 
-        <Text style={[styles.label, { color: theme.textSecondary }]}>
-          訪問日
-        </Text>
-        <Pressable
-          role="button"
-          accessibilityLabel="訪問日を変更"
-          onPress={openDatePicker}
-          style={[styles.field, { backgroundColor: theme.surface }]}
-        >
-          <Text style={[styles.value, { color: theme.text }]}>
-            {formatJapaneseDate(visitedOn)}
-          </Text>
-        </Pressable>
-
-        <Text style={[styles.label, { color: theme.textSecondary }]}>
-          メモ（任意）
-        </Text>
-        <TextInput
-          value={memo}
-          onChangeText={setMemo}
-          placeholder="メモ"
-          placeholderTextColor={theme.textSecondary}
-          multiline
-          accessibilityLabel="メモ"
-          style={[
-            styles.field,
-            styles.memo,
-            { backgroundColor: theme.surface, color: theme.text },
-          ]}
-        />
+        <VisitDateField value={visitedOn} onChange={setVisitedOn} />
+        <MemoField value={memo} onChangeText={setMemo} />
       </View>
 
       <ScrollView style={styles.list} testID="municipality-picker">
@@ -203,17 +151,6 @@ const styles = StyleSheet.create({
   value: {
     marginTop: 4,
     fontSize: 16,
-  },
-  field: {
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  memo: {
-    minHeight: 64,
-    fontSize: 16,
-    textAlignVertical: "top",
   },
   list: {
     flex: 1,
