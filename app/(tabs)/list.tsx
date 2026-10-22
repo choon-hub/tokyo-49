@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -10,6 +11,7 @@ import { useTheme } from "../../theme/use-theme";
 
 export default function List() {
   const theme = useTheme();
+  const router = useRouter();
   const { visitedCodes, visitedCount, loadFailed } = useConquest();
   return (
     <SafeAreaView
@@ -29,6 +31,12 @@ export default function List() {
             key={municipality.code}
             name={municipality.name}
             visited={visitedCodes.has(municipality.code)}
+            onPress={() =>
+              router.push({
+                pathname: "/municipality/[code]",
+                params: { code: municipality.code },
+              })
+            }
           />
         ))}
       </ScrollView>

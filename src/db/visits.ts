@@ -77,12 +77,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   return result.lastInsertRowId;
 }
 
-/** 全訪問を、訪問日の新しい順（同日なら追加の新しい順）で返す。 */
-export async function listVisits(db: SQLiteDatabase): Promise<Visit[]> {
-  const rows = await db.getAllAsync<VisitRow>(
-    "SELECT * FROM visits ORDER BY visited_on DESC, id DESC",
-  );
-  return rows.map((row) => ({
+function toVisit(row: VisitRow): Visit {
+  return {
     id: row.id,
     placeName: row.place_name,
     municipalityCode: row.municipality_code,
@@ -92,7 +88,32 @@ export async function listVisits(db: SQLiteDatabase): Promise<Visit[]> {
     memo: row.memo,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  };
+}
+
+/** 全訪問を、訪問日の新しい順（同日なら追加の新しい順）で返す。 */
+export async function listVisits(db: SQLiteDatabase): Promise<Visit[]> {
+  const rows = await db.getAllAsync<VisitRow>(
+    "SELECT * FROM visits ORDER BY visited_on DESC, id DESC",
+  );
+  return rows.map(toVisit);
+}
+
+/**
+ * 1つの区市の訪問を、訪問日の新しい順（同日なら追加の新しい順）で返す。
+ * 絞り込みには idx_visits_muni が使われる（要件書 §5.2）。
+ */
+export async function listVisitsByMunicipality(
+  db: SQLiteDatabase,
+  municipalityCode: string,
+): Promise<Visit[]> {
+  const rows = await db.getAllAsync<VisitRow>(
+    `SELECT * FROM visits
+WHERE municipality_code = ?
+ORDER BY visited_on DESC, id DESC`,
+    [municipalityCode],
+  );
+  return rows.map(toVisit);
 }
 
 /** 区市コードごとの訪問回数。 */

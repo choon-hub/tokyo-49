@@ -3,6 +3,7 @@ import {
   addVisit,
   countVisitsByMunicipality,
   listVisits,
+  listVisitsByMunicipality,
   type NewVisit,
 } from "../src/db/visits";
 import { openTestDatabase } from "../test-utils/node-sqlite";
@@ -154,6 +155,81 @@ describe("listVisits", () => {
       createdAt: expect.stringMatching(ISO_UTC),
       updatedAt: expect.stringMatching(ISO_UTC),
     });
+  });
+});
+
+describe("listVisitsByMunicipality", () => {
+  const nishitokyo: NewVisit = {
+    ...shinjuku,
+    municipalityCode: "13229",
+    placeName: "西東京市",
+  };
+
+  it("指定した区市の行だけを返す", async () => {
+    const { db } = await setup();
+    await addVisit(db, shinjuku);
+    await addVisit(db, nishitokyo);
+    await addVisit(db, { ...shinjuku, visitedOn: "2026-10-01" });
+
+    const visits = await listVisitsByMunicipality(db, "13104");
+    expect(visits.map((v) => v.id)).toEqual([1, 3]);
+    expect(visits.every((v) => v.municipalityCode === "13104")).toBe(true);
+    expect(
+      (await listVisitsByMunicipality(db, "13229")).map((v) => v.id),
+    ).toEqual([2]);
+  });
+
+  it("訪問日の新しい順で、同じ日なら後から追加した行が先", async () => {
+    const { db } = await setup();
+    await addVisit(db, { ...shinjuku, visitedOn: "2026-10-01" });
+    await addVisit(db, { ...shinjuku, visitedOn: "2026-10-18" });
+    await addVisit(db, { ...shinjuku, visitedOn: "2025-12-31" });
+    await addVisit(db, { ...shinjuku, visitedOn: "2026-10-18" });
+
+    const visits = await listVisitsByMunicipality(db, "13104");
+    expect(visits.map((v) => [v.id, v.visitedOn])).toEqual([
+      [4, "2026-10-18"],
+      [2, "2026-10-18"],
+      [1, "2026-10-01"],
+      [3, "2025-12-31"],
+    ]);
+  });
+
+  it("訪問日が未来の行も返す", async () => {
+    const { db } = await setup();
+    await addVisit(db, shinjuku);
+    await addVisit(db, { ...shinjuku, visitedOn: "2099-12-31" });
+
+    const visits = await listVisitsByMunicipality(db, "13104");
+    expect(visits.map((v) => v.visitedOn)).toEqual([
+      "2099-12-31",
+      "2026-10-18",
+    ]);
+  });
+
+  it("行の無い区市では空の配列", async () => {
+    const { db } = await setup();
+    await addVisit(db, nishitokyo);
+    expect(await listVisitsByMunicipality(db, "13104")).toEqual([]);
+  });
+
+  it("列名をキャメルケースにして返し、メモが NULL の行は null のまま", async () => {
+    const { db } = await setup();
+    await addVisit(db, { ...shinjuku, memo: null });
+
+    expect(await listVisitsByMunicipality(db, "13104")).toEqual([
+      {
+        id: 1,
+        placeName: "新宿区",
+        municipalityCode: "13104",
+        source: "manual",
+        refId: null,
+        visitedOn: "2026-10-18",
+        memo: null,
+        createdAt: expect.stringMatching(ISO_UTC),
+        updatedAt: expect.stringMatching(ISO_UTC),
+      },
+    ]);
   });
 });
 

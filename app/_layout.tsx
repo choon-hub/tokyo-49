@@ -20,6 +20,15 @@ export default function RootLayout() {
             name="visit/new"
             options={{ headerShown: true, title: "訪問を記録" }}
           />
+          <Stack.Screen
+            name="municipality/[code]"
+            options={{
+              presentation: "formSheet",
+              // 初めは画面の半分、引き上げると全画面まで広がる。
+              sheetAllowedDetents: [0.5, 1.0],
+              sheetGrabberVisible: true,
+            }}
+          />
         </Stack>
       </ThemeProvider>
     </SQLiteProvider>
