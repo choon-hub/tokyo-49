@@ -1,6 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { AddVisitForm } from "../../src/components/AddVisitForm";
 import { VisitHistoryItem } from "../../src/components/VisitHistoryItem";
 import {
   findMunicipalityByCode,
@@ -9,8 +11,8 @@ import {
 import { useMunicipalityVisits } from "../../src/hooks/use-municipality-visits";
 import { useTheme } from "../../theme/use-theme";
 
-// 区市の詳細（ボトムシート）。いまは訪問履歴の閲覧だけ。
-// 追記・編集・削除は #7〜#9 でこのシートに足す。
+// 区市の詳細（ボトムシート）。訪問履歴の閲覧と追記ができる。
+// 編集・削除は #8・#9 でこのシートに足す。
 export default function MunicipalitySheet() {
   const theme = useTheme();
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -37,13 +39,41 @@ export default function MunicipalitySheet() {
 
 function VisitHistory({ municipality }: { municipality: Municipality }) {
   const theme = useTheme();
-  const { visits, loadFailed } = useMunicipalityVisits(municipality.code);
+  const { visits, loadFailed, reload } = useMunicipalityVisits(
+    municipality.code,
+  );
+  const [adding, setAdding] = useState(false);
+
+  // 保存してもシートのフォーカスは変わらないので、履歴は自分で読み直す。
+  // フォームは閉じる（アンマウントで入力もリセットされる）が、シートは開いたまま。
+  const handleSaved = () => {
+    setAdding(false);
+    reload();
+  };
 
   return (
-    <>
+    // キーボードを出しても入力欄までスクロールできるよう、中身全体をスクロールさせる。
+    <ScrollView keyboardShouldPersistTaps="handled">
       <Text role="heading" style={[styles.heading, { color: theme.text }]}>
         {municipality.name}
       </Text>
+      {adding ? (
+        <AddVisitForm
+          municipality={municipality}
+          onSaved={handleSaved}
+          onCancel={() => setAdding(false)}
+        />
+      ) : (
+        <Pressable
+          role="button"
+          onPress={() => setAdding(true)}
+          style={[styles.addButton, { backgroundColor: theme.primary }]}
+        >
+          <Text style={[styles.addLabel, { color: theme.onPrimary }]}>
+            追記
+          </Text>
+        </Pressable>
+      )}
       {loadFailed && (
         <Text role="alert" style={[styles.message, { color: theme.text }]}>
           訪問記録を読み込めませんでした。しばらくしてからもう一度お試しください。
@@ -55,13 +85,13 @@ function VisitHistory({ municipality }: { municipality: Municipality }) {
         </Text>
       )}
       {visits !== null && visits.length > 0 && (
-        <ScrollView testID="visit-history">
+        <View testID="visit-history">
           {visits.map((visit) => (
             <VisitHistoryItem key={visit.id} visit={visit} />
           ))}
-        </ScrollView>
+        </View>
       )}
-    </>
+    </ScrollView>
   );
 }
 
@@ -74,6 +104,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     fontSize: 20,
+    fontWeight: "bold",
+  },
+  addButton: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  addLabel: {
+    fontSize: 16,
     fontWeight: "bold",
   },
   message: {

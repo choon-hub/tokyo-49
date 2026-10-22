@@ -1,6 +1,6 @@
 import { useFocusEffect } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { listVisitsByMunicipality, type Visit } from "../db/visits";
 
@@ -9,11 +9,13 @@ export type MunicipalityVisits = {
   visits: Visit[] | null;
   /** 直近の読み込みに失敗した */
   loadFailed: boolean;
+  /** 履歴を読み直す（フォーカスが変わらない画面内の保存の後に使う） */
+  reload: () => void;
 };
 
 /**
  * 1つの区市の訪問履歴を、user.db の visits から読む。
- * 画面にフォーカスが来るたびに読み直し、再読み込み中は前回の値を残す。
+ * 画面にフォーカスが来るたびと reload() のたびに読み直し、再読み込み中は前回の値を残す。
  * 区市コードはマスタにあるものを渡す（検証は呼び出し側で行う）。
  */
 export function useMunicipalityVisits(
@@ -22,27 +24,33 @@ export function useMunicipalityVisits(
   const db = useSQLiteContext();
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  // 読み込みごとに番号を振り、最新の読み込みの結果だけを反映する。
+  // フォーカスを外れたときや区市が変わったときも番号を進め、届いた結果を捨てる。
+  const latestRequest = useRef(0);
+
+  const load = useCallback(() => {
+    const request = ++latestRequest.current;
+    const run = async () => {
+      try {
+        const result = await listVisitsByMunicipality(db, municipalityCode);
+        if (request !== latestRequest.current) return;
+        setVisits(result);
+        setLoadFailed(false);
+      } catch {
+        if (request === latestRequest.current) setLoadFailed(true);
+      }
+    };
+    void run();
+  }, [db, municipalityCode]);
 
   useFocusEffect(
     useCallback(() => {
-      // フォーカスを外れた後や、区市が変わった後に届いた結果は捨てる。
-      let active = true;
-      const load = async () => {
-        try {
-          const result = await listVisitsByMunicipality(db, municipalityCode);
-          if (!active) return;
-          setVisits(result);
-          setLoadFailed(false);
-        } catch {
-          if (active) setLoadFailed(true);
-        }
-      };
-      void load();
+      load();
       return () => {
-        active = false;
+        latestRequest.current++;
       };
-    }, [db, municipalityCode]),
+    }, [load]),
   );
 
-  return { visits, loadFailed };
+  return { visits, loadFailed, reload: load };
 }
