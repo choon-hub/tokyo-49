@@ -158,6 +158,22 @@ describe("訪問済みの表示", () => {
   });
 });
 
+describe("行の読み上げ", () => {
+  it("49行すべてがボタンとして伝わり、ラベルは「<区市名> 訪問済み／未訪問」のまま", async () => {
+    mockCount.mockResolvedValue([{ municipalityCode: "13101", visitCount: 1 }]);
+    renderRouter("./app", { initialUrl: "/list" });
+    expect(await screen.findByText("1 / 49")).toBeTruthy();
+
+    expect(
+      screen.getByRole("button", { name: "千代田区 訪問済み" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "西東京市 未訪問" })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: / (訪問済み|未訪問)$/ }),
+    ).toHaveLength(49);
+  });
+});
+
 describe("読み込みの失敗", () => {
   it("集計に失敗したら日本語のエラーを alert で出し、一覧は表示したまま", async () => {
     mockCount.mockRejectedValue(new Error("disk I/O error"));
