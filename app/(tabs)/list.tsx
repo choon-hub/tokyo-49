@@ -1,31 +1,35 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ConquestCount } from "../../src/components/ConquestCount";
+import { MunicipalityRow } from "../../src/components/MunicipalityRow";
 import { RecordVisitButton } from "../../src/components/RecordVisitButton";
 import { MUNICIPALITIES } from "../../src/data/municipalities";
+import { useConquest } from "../../src/hooks/use-conquest";
 import { useTheme } from "../../theme/use-theme";
 
 export default function List() {
   const theme = useTheme();
+  const { visitedCodes, visitedCount, loadFailed } = useConquest();
   return (
     <SafeAreaView
       edges={["top"]}
       style={[styles.container, { backgroundColor: theme.background }]}
       testID="list-screen"
     >
-      {/* 訪問済みの数は #5 で訪問データから求める。ここでは 0 のまま */}
-      <ConquestCount visited={0} total={MUNICIPALITIES.length} />
+      <ConquestCount visited={visitedCount} total={MUNICIPALITIES.length} />
+      {loadFailed && (
+        <Text role="alert" style={[styles.error, { color: theme.text }]}>
+          訪問記録を読み込めませんでした。しばらくしてからもう一度お試しください。
+        </Text>
+      )}
       <ScrollView>
         {MUNICIPALITIES.map((municipality) => (
-          <View
+          <MunicipalityRow
             key={municipality.code}
-            style={[styles.row, { borderBottomColor: theme.border }]}
-          >
-            <Text style={[styles.name, { color: theme.text }]}>
-              {municipality.name}
-            </Text>
-          </View>
+            name={municipality.name}
+            visited={visitedCodes.has(municipality.code)}
+          />
         ))}
       </ScrollView>
       <RecordVisitButton />
@@ -37,12 +41,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  row: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  name: {
-    fontSize: 16,
+  error: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    fontSize: 14,
   },
 });

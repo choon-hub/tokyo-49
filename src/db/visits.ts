@@ -94,3 +94,31 @@ export async function listVisits(db: SQLiteDatabase): Promise<Visit[]> {
     updatedAt: row.updated_at,
   }));
 }
+
+/** 区市コードごとの訪問回数。 */
+export type MunicipalityVisitCount = {
+  municipalityCode: string;
+  visitCount: number;
+};
+
+/**
+ * 区市コードごとの訪問回数を返す（要件書 §5.2 の制覇判定クエリ）。
+ * 行のない区市は結果に含まれない。マスタとの突き合わせは呼び出し側で行う。
+ */
+export async function countVisitsByMunicipality(
+  db: SQLiteDatabase,
+): Promise<MunicipalityVisitCount[]> {
+  const rows = await db.getAllAsync<{
+    municipality_code: string;
+    visit_count: number;
+  }>(
+    `SELECT municipality_code, COUNT(*) AS visit_count
+FROM visits
+GROUP BY municipality_code
+ORDER BY municipality_code`,
+  );
+  return rows.map((row) => ({
+    municipalityCode: row.municipality_code,
+    visitCount: row.visit_count,
+  }));
+}
