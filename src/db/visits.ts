@@ -46,6 +46,27 @@ function normalizeMemo(memo: string | null): string | null {
   return memo.trim() === "" ? null : memo;
 }
 
+/** 訪問で編集できる列（区市・source・ref_id は変えられない。Q20）。 */
+export type VisitChanges = {
+  placeName: string;
+  /** 'YYYY-MM-DD'（ローカル日付） */
+  visitedOn: string;
+  memo: string | null;
+};
+
+/** 追加と編集で共通の検証。 */
+function validateVisitFields(input: {
+  placeName: string;
+  visitedOn: string;
+}): void {
+  if (!isValidDateString(input.visitedOn)) {
+    throw new Error(`訪問日の形式が正しくありません: ${input.visitedOn}`);
+  }
+  if (input.placeName.trim() === "") {
+    throw new Error("場所名が空です");
+  }
+}
+
 /** 訪問を1行追加し、追加した行の id を返す。 */
 export async function addVisit(
   db: SQLiteDatabase,
@@ -55,12 +76,7 @@ export async function addVisit(
   if (!findMunicipalityByCode(input.municipalityCode)) {
     throw new Error(`49区市にない区市コードです: ${input.municipalityCode}`);
   }
-  if (!isValidDateString(input.visitedOn)) {
-    throw new Error(`訪問日の形式が正しくありません: ${input.visitedOn}`);
-  }
-  if (input.placeName.trim() === "") {
-    throw new Error("場所名が空です");
-  }
+  validateVisitFields(input);
   const now = new Date().toISOString();
   const result = await db.runAsync(
     `INSERT INTO visits
@@ -78,6 +94,33 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ],
   );
   return result.lastInsertRowId;
+}
+
+/**
+ * 訪問1行の場所名・訪問日・メモを更新し、updated_at を保存した時刻にする。
+ * 場所名は前後の空白を除く。指定した id の行が無ければ拒否する。
+ */
+export async function updateVisit(
+  db: SQLiteDatabase,
+  id: number,
+  changes: VisitChanges,
+): Promise<void> {
+  validateVisitFields(changes);
+  const result = await db.runAsync(
+    `UPDATE visits
+SET place_name = ?, visited_on = ?, memo = ?, updated_at = ?
+WHERE id = ?`,
+    [
+      changes.placeName.trim(),
+      changes.visitedOn,
+      normalizeMemo(changes.memo),
+      new Date().toISOString(),
+      id,
+    ],
+  );
+  if (result.changes === 0) {
+    throw new Error(`訪問が見つかりません: ${id}`);
+  }
 }
 
 function toVisit(row: VisitRow): Visit {
