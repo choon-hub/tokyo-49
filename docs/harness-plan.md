@@ -442,6 +442,10 @@ E1 の Issue はユーザーに選んでもらう。候補は Phase 0 の基盤 
 | 画面の確認（`/run-skill-generator`、`/verify`） | 画面の確認を AI に任せたくなったとき（D6 の見直し） | エミュレータでの起動手順を skill にする |
 | `design-issue` の `allowed-tools` の絞り込み | 意図しない `gh api` の呼び出しが起きたとき | `Bash(gh api repos/*)` を必要なエンドポイントだけにする |
 
+## 7.5 Phase 3: ループ
+
+計画と手順は docs/loop-plan.md を参照。D7 は D7'（ゲート② を Draft PR の作成に置き換える）に変更した。
+
 ---
 
 ## 8. 運用ルール
