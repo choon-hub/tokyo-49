@@ -1,0 +1,30 @@
+name: Delete merged branch
+on:
+  pull_request:
+    types: [closed]
+permissions:
+  contents: write
+jobs:
+  delete-branch:
+    # マージされた PR のみ対象。fork の PR（シークレット・権限が無い）と default ブランチは除外する
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete head branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # ブランチ名は run に直接埋め込まず env 経由で渡す（スクリプトインジェクション対策）
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if out=$(gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRANCH}" 2>&1); then
+            echo "Deleted branch: ${BRANCH}"
+          elif printf '%s' "$out" | grep -q 'HTTP 404'; then
+            echo "Branch already deleted: ${BRANCH}"
+          else
+            echo "$out" >&2
+            exit 1
+          fi
