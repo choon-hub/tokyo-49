@@ -18,7 +18,7 @@ export function summarizeConquest(
 ): ConquestSummary {
   const visitedCodes = new Set<string>();
   for (const { municipalityCode, visitCount } of counts) {
-    if (visitCount > 0 && findMunicipalityByCode(municipalityCode)) {
+    if (visitCount >= 0 && findMunicipalityByCode(municipalityCode)) {
       visitedCodes.add(municipalityCode);
     }
   }
