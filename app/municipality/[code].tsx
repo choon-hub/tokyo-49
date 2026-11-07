@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddVisitForm } from "../../src/components/AddVisitForm";
+import { EditVisitForm } from "../../src/components/EditVisitForm";
 import { VisitHistoryItem } from "../../src/components/VisitHistoryItem";
 import {
   findMunicipalityByCode,
@@ -11,8 +12,8 @@ import {
 import { useMunicipalityVisits } from "../../src/hooks/use-municipality-visits";
 import { useTheme } from "../../theme/use-theme";
 
-// 区市の詳細（ボトムシート）。訪問履歴の閲覧と追記ができる。
-// 編集・削除は #8・#9 でこのシートに足す。
+// 区市の詳細（ボトムシート）。訪問履歴の閲覧・追記・編集ができる。
+// 削除は #9 でこのシートに足す。
 export default function MunicipalitySheet() {
   const theme = useTheme();
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -37,17 +38,21 @@ export default function MunicipalitySheet() {
   );
 }
 
+// 開いているフォーム。保存が競合しないよう、同時に開けるのは1つまで。
+type OpenForm = { kind: "none" } | { kind: "add" } | { kind: "edit"; id: number };
+
 function VisitHistory({ municipality }: { municipality: Municipality }) {
   const theme = useTheme();
   const { visits, loadFailed, reload } = useMunicipalityVisits(
     municipality.code,
   );
-  const [adding, setAdding] = useState(false);
+  const [openForm, setOpenForm] = useState<OpenForm>({ kind: "none" });
+  const closeForm = () => setOpenForm({ kind: "none" });
 
   // 保存してもシートのフォーカスは変わらないので、履歴は自分で読み直す。
   // フォームは閉じる（アンマウントで入力もリセットされる）が、シートは開いたまま。
   const handleSaved = () => {
-    setAdding(false);
+    closeForm();
     reload();
   };
 
@@ -57,16 +62,17 @@ function VisitHistory({ municipality }: { municipality: Municipality }) {
       <Text role="heading" style={[styles.heading, { color: theme.text }]}>
         {municipality.name}
       </Text>
-      {adding ? (
+      {openForm.kind === "add" && (
         <AddVisitForm
           municipality={municipality}
           onSaved={handleSaved}
-          onCancel={() => setAdding(false)}
+          onCancel={closeForm}
         />
-      ) : (
+      )}
+      {openForm.kind === "none" && (
         <Pressable
           role="button"
-          onPress={() => setAdding(true)}
+          onPress={() => setOpenForm({ kind: "add" })}
           style={[styles.addButton, { backgroundColor: theme.primary }]}
         >
           <Text style={[styles.addLabel, { color: theme.onPrimary }]}>
@@ -86,9 +92,28 @@ function VisitHistory({ municipality }: { municipality: Municipality }) {
       )}
       {visits !== null && visits.length > 0 && (
         <View testID="visit-history">
-          {visits.map((visit) => (
-            <VisitHistoryItem key={visit.id} visit={visit} />
-          ))}
+          {visits.map((visit) =>
+            // 編集中の行は、その位置でフォームに替える。
+            openForm.kind === "edit" && openForm.id === visit.id ? (
+              <EditVisitForm
+                key={visit.id}
+                municipality={municipality}
+                visit={visit}
+                onSaved={handleSaved}
+                onCancel={closeForm}
+              />
+            ) : (
+              <VisitHistoryItem
+                key={visit.id}
+                visit={visit}
+                onEdit={
+                  openForm.kind === "none"
+                    ? () => setOpenForm({ kind: "edit", id: visit.id })
+                    : undefined
+                }
+              />
+            ),
+          )}
         </View>
       )}
     </ScrollView>

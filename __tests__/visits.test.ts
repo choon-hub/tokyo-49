@@ -5,6 +5,8 @@ import {
   listVisits,
   listVisitsByMunicipality,
   type NewVisit,
+  updateVisit,
+  type VisitChanges,
 } from "../src/db/visits";
 import { openTestDatabase } from "../test-utils/node-sqlite";
 
@@ -140,6 +142,100 @@ describe("addVisit", () => {
     const { db, raw } = await setup();
     await addVisit(db, { ...shinjuku, placeName: "新宿御苑" });
     expect(allRows(raw)[0].place_name).toBe("新宿御苑");
+  });
+});
+
+describe("updateVisit", () => {
+  const changes: VisitChanges = {
+    placeName: "新宿御苑",
+    visitedOn: "2099-12-31",
+    memo: "庭園",
+  };
+
+  // 2行入れて、1行目（id は first）を編集の対象にする。
+  async function setupTwoRows() {
+    const test = await setup();
+    const first = await addVisit(test.db, shinjuku);
+    await addVisit(test.db, { ...shinjuku, visitedOn: "2026-10-01" });
+    return { ...test, first };
+  }
+
+  it("場所名・訪問日・メモと updated_at だけを更新し、ほかの列と行は変えない", async () => {
+    jest.useFakeTimers({
+      now: new Date("2026-10-17T15:30:00.000Z"),
+      doNotFake: ["nextTick", "setImmediate", "queueMicrotask"],
+    });
+    try {
+      const { db, raw, first } = await setupTwoRows();
+      const before = allRows(raw);
+
+      jest.setSystemTime(new Date("2026-10-20T03:00:00.000Z"));
+      await updateVisit(db, first, changes);
+
+      const after = allRows(raw);
+      expect(after).toHaveLength(2);
+      expect(after[0]).toEqual({
+        ...before[0],
+        place_name: "新宿御苑",
+        visited_on: "2099-12-31",
+        memo: "庭園",
+        updated_at: "2026-10-20T03:00:00.000Z",
+      });
+      expect(after[0].created_at).toBe("2026-10-17T15:30:00.000Z");
+      // ほかの行は変わらない
+      expect(after[1]).toEqual(before[1]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("過去日にも変えられる", async () => {
+    const { db, raw, first } = await setupTwoRows();
+    await updateVisit(db, first, { ...changes, visitedOn: "2000-02-29" });
+    expect(allRows(raw)[0].visited_on).toBe("2000-02-29");
+  });
+
+  it("場所名の前後の空白を除いて保存する", async () => {
+    const { db, raw, first } = await setupTwoRows();
+    await updateVisit(db, first, { ...changes, placeName: " 　新宿御苑\t" });
+    expect(allRows(raw)[0].place_name).toBe("新宿御苑");
+  });
+
+  it.each([
+    ["空文字", ""],
+    ["空白だけ", "  \n\t　"],
+    ["null", null],
+  ])("メモが%sなら NULL にする", async (_label, memo) => {
+    const { db, raw, first } = await setupTwoRows();
+    await updateVisit(db, first, { ...changes, memo });
+    expect(allRows(raw)[0].memo).toBeNull();
+  });
+
+  it.each([
+    ["空の場所名", { ...changes, placeName: "" }, "場所名が空"],
+    ["空白だけの場所名", { ...changes, placeName: "  \n\t　" }, "場所名が空"],
+    ["存在しない日付", { ...changes, visitedOn: "2026-02-30" }, "訪問日の形式"],
+    ["区切りが違う日付", { ...changes, visitedOn: "2026/10/18" }, "訪問日の形式"],
+    [
+      "時刻つきの日付",
+      { ...changes, visitedOn: "2026-10-18T00:00:00Z" },
+      "訪問日の形式",
+    ],
+    ["空の日付", { ...changes, visitedOn: "" }, "訪問日の形式"],
+  ])("%sは拒否し、DB を変えない", async (_label, input, message) => {
+    const { db, raw, first } = await setupTwoRows();
+    const before = allRows(raw);
+    await expect(updateVisit(db, first, input)).rejects.toThrow(message);
+    expect(allRows(raw)).toEqual(before);
+  });
+
+  it("存在しない id は拒否し、DB を変えない", async () => {
+    const { db, raw, first } = await setupTwoRows();
+    const before = allRows(raw);
+    await expect(updateVisit(db, first + 100, changes)).rejects.toThrow(
+      "訪問が見つかりません",
+    );
+    expect(allRows(raw)).toEqual(before);
   });
 });
 

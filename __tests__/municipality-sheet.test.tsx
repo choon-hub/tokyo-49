@@ -13,6 +13,7 @@ import {
   addVisit,
   countVisitsByMunicipality,
   listVisitsByMunicipality,
+  updateVisit,
   type Visit,
 } from "../src/db/visits";
 
@@ -20,6 +21,7 @@ jest.mock("../src/db/visits", () => ({
   addVisit: jest.fn(),
   countVisitsByMunicipality: jest.fn(),
   listVisitsByMunicipality: jest.fn(),
+  updateVisit: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => ({
@@ -29,6 +31,7 @@ jest.mock("@react-native-community/datetimepicker", () => ({
 const mockAddVisit = jest.mocked(addVisit);
 const mockCount = jest.mocked(countVisitsByMunicipality);
 const mockList = jest.mocked(listVisitsByMunicipality);
+const mockUpdateVisit = jest.mocked(updateVisit);
 const mockOpenPicker = jest.mocked(DateTimePickerAndroid.open);
 
 const visit = (overrides: Partial<Visit>): Visit => ({
@@ -51,6 +54,8 @@ beforeEach(() => {
   mockList.mockResolvedValue([]);
   mockAddVisit.mockReset();
   mockAddVisit.mockResolvedValue(1);
+  mockUpdateVisit.mockReset();
+  mockUpdateVisit.mockResolvedValue();
   mockOpenPicker.mockReset();
 });
 
@@ -116,10 +121,10 @@ describe("履歴の表示", () => {
         .map((node) => node.props.children as string),
     );
     expect(texts).toEqual([
-      ["2099年12月31日（木）", "新宿区", "未来の予定"],
-      ["2026年10月18日（日）", "新宿区", "都庁"],
-      ["2026年10月18日（日）", "新宿御苑"],
-      ["2026年10月1日（木）", "新宿区", "歌舞伎町"],
+      ["2099年12月31日（木）", "新宿区", "未来の予定", "編集"],
+      ["2026年10月18日（日）", "新宿区", "都庁", "編集"],
+      ["2026年10月18日（日）", "新宿御苑", "編集"],
+      ["2026年10月1日（木）", "新宿区", "歌舞伎町", "編集"],
     ]);
     // メモの無い訪問に、空の行や「null」を出さない
     expect(sheet().queryByText(/null/)).toBeNull();
@@ -142,23 +147,29 @@ describe("履歴の表示", () => {
     expect(sheet().queryByText("まだ訪問の記録はありません")).toBeNull();
   });
 
-  it("シートには編集・削除の操作を置かない（ボタンは「追記」だけ）", async () => {
-    mockList.mockResolvedValue([visit({ memo: "都庁" })]);
+  it("シートには削除の操作を置かない（ボタンは「追記」と各行の「編集」だけ）", async () => {
+    mockList.mockResolvedValue([
+      visit({ id: 2, memo: "都庁" }),
+      visit({ id: 1, visitedOn: "2026-10-01" }),
+    ]);
     await openFromList("新宿区 未訪問");
 
     expect(
       sheet()
         .queryAllByRole("button")
         .map((node) => within(node).getByText(/./).props.children as string),
-    ).toEqual(["追記"]);
-    expect(sheet().queryByText(/編集|削除/)).toBeNull();
+    ).toEqual(["追記", "編集", "編集"]);
+    expect(sheet().queryByText(/削除/)).toBeNull();
 
-    // 追記フォームを開いても、編集・削除の操作は出ない
+    // 追記フォームを開いても、削除の操作は出ない
     fireEvent.press(sheet().getByRole("button", { name: "追記" }));
-    expect(sheet().queryByText(/編集|削除/)).toBeNull();
-    expect(
-      within(sheet().getByTestId("visit-history")).queryAllByRole("button"),
-    ).toHaveLength(0);
+    expect(sheet().queryByText(/削除/)).toBeNull();
+
+    // 編集フォームを開いても、削除の操作は出ない
+    fireEvent.press(sheet().getByRole("button", { name: "キャンセル" }));
+    fireEvent.press(sheet().getAllByRole("button", { name: /を編集$/ })[0]);
+    expect(screen.getByTestId("edit-visit-form")).toBeTruthy();
+    expect(sheet().queryByText(/削除/)).toBeNull();
   });
 });
 
@@ -446,5 +457,281 @@ describe("追記", () => {
     expect(addButton()).toBeTruthy();
     expect(mockAddVisit).not.toHaveBeenCalled();
     expect(mockList).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("編集", () => {
+  const rows = [
+    visit({ id: 3, visitedOn: "2026-10-18", placeName: "都庁", memo: "展望室" }),
+    visit({ id: 2, visitedOn: "2026-10-18", placeName: "新宿御苑" }),
+    visit({ id: 1, visitedOn: "2026-10-01", placeName: "歌舞伎町" }),
+  ];
+
+  beforeEach(() => {
+    mockList.mockResolvedValue(rows);
+    mockCount.mockResolvedValue([{ municipalityCode: "13104", visitCount: 3 }]);
+  });
+
+  const editButtons = () =>
+    sheet().queryAllByRole("button", { name: /を編集$/ });
+  const editButton = (name: string) => sheet().getByRole("button", { name });
+  const form = () => within(screen.getByTestId("edit-visit-form"));
+  const saveButton = () => form().getByRole("button", { name: "保存" });
+  // 履歴に並ぶ表示行の場所名（フォームに替わった行は含まない）
+  const places = () =>
+    sheet()
+      .getAllByTestId("visit-history-item")
+      .map((item) => within(item).getAllByText(/./)[1].props.children);
+
+  async function openEdit(name = "2026年10月18日（日） 新宿御苑を編集") {
+    const result = await openFromList("新宿区 訪問済み");
+    fireEvent.press(editButton(name));
+    expect(screen.getByTestId("edit-visit-form")).toBeTruthy();
+    return result;
+  }
+
+  it("各行に、訪問日と場所名を読み上げラベルに含む「編集」ボタンがある", async () => {
+    await openFromList("新宿区 訪問済み");
+
+    expect(editButtons().map((node) => node.props.accessibilityLabel)).toEqual(
+      [
+        "2026年10月18日（日） 都庁を編集",
+        "2026年10月18日（日） 新宿御苑を編集",
+        "2026年10月1日（木） 歌舞伎町を編集",
+      ],
+    );
+    sheet()
+      .getAllByTestId("visit-history-item")
+      .forEach((item) => {
+        expect(within(item).getByRole("button")).toHaveTextContent("編集");
+      });
+  });
+
+  it("押すとその行の位置が今の値の入ったフォームに替わり、区市・入力経路の欄は無い", async () => {
+    await openEdit("2026年10月18日（日） 都庁を編集");
+
+    // 履歴の並びの中で、1行目がフォームになり、ほかの行はそのまま
+    const order = sheet()
+      .getByTestId("visit-history")
+      .findAll(
+        (node) =>
+          typeof node.type === "string" &&
+          (node.props.testID === "edit-visit-form" ||
+            node.props.testID === "visit-history-item"),
+      )
+      .map((node) => node.props.testID);
+    expect(order).toEqual([
+      "edit-visit-form",
+      "visit-history-item",
+      "visit-history-item",
+    ]);
+    expect(places()).toEqual(["新宿御苑", "歌舞伎町"]);
+
+    expect(form().getByLabelText("場所名").props.value).toBe("都庁");
+    expect(form().getByText("2026年10月18日（日）")).toBeTruthy();
+    expect(form().getByLabelText("メモ").props.value).toBe("展望室");
+    expect(form().getByRole("button", { name: "保存" })).toBeTruthy();
+    expect(form().getByRole("button", { name: "キャンセル" })).toBeTruthy();
+    // 訪問日・キャンセル・保存だけ（区市・入力経路を変える操作は無い）
+    expect(form().getAllByRole("button")).toHaveLength(3);
+    expect(sheet().queryAllByRole("radio")).toHaveLength(0);
+  });
+
+  it("メモが null の行では、メモ欄は空", async () => {
+    await openEdit();
+    expect(form().getByLabelText("場所名").props.value).toBe("新宿御苑");
+    expect(form().getByLabelText("メモ").props.value).toBe("");
+  });
+
+  it("編集フォームを開いている間は、追記ボタンとほかの行の編集ボタンが無い", async () => {
+    await openEdit();
+    expect(sheet().queryByRole("button", { name: "追記" })).toBeNull();
+    expect(editButtons()).toHaveLength(0);
+    expect(screen.queryByTestId("add-visit-form")).toBeNull();
+  });
+
+  it("追記フォームを開いている間は、編集ボタンが無い", async () => {
+    await openFromList("新宿区 訪問済み");
+    fireEvent.press(sheet().getByRole("button", { name: "追記" }));
+
+    expect(screen.getByTestId("add-visit-form")).toBeTruthy();
+    expect(editButtons()).toHaveLength(0);
+    expect(sheet().getAllByTestId("visit-history-item")).toHaveLength(3);
+  });
+
+  it("ピッカーで過去日・未来日に変えられ、キャンセルでは日付が変わらない", async () => {
+    await openEdit();
+    const dateButton = () =>
+      form().getByRole("button", { name: "訪問日を変更" });
+
+    fireEvent.press(dateButton());
+    const options = mockOpenPicker.mock.calls[0][0];
+    expect(options.mode).toBe("date");
+    expect(options.minimumDate).toBeUndefined();
+    expect(options.maximumDate).toBeUndefined();
+    // ピッカーはその訪問の日付から開く
+    expect(options.value).toEqual(new Date(2026, 9, 18));
+    act(() => {
+      options.onChange?.(
+        { type: "set", nativeEvent: { timestamp: 0, utcOffset: 540 } },
+        new Date(2020, 1, 29),
+      );
+    });
+    expect(form().getByText("2020年2月29日（土）")).toBeTruthy();
+
+    fireEvent.press(dateButton());
+    act(() => {
+      mockOpenPicker.mock.calls[1][0].onChange?.(
+        { type: "set", nativeEvent: { timestamp: 0, utcOffset: 540 } },
+        new Date(2099, 11, 31),
+      );
+    });
+    expect(form().getByText("2099年12月31日（木）")).toBeTruthy();
+
+    fireEvent.press(dateButton());
+    act(() => {
+      mockOpenPicker.mock.calls[2][0].onChange?.(
+        { type: "dismissed", nativeEvent: { timestamp: 0, utcOffset: 540 } },
+        undefined,
+      );
+    });
+    expect(form().getByText("2099年12月31日（木）")).toBeTruthy();
+
+    fireEvent.press(saveButton());
+    await act(async () => {});
+    expect(mockUpdateVisit).toHaveBeenCalledWith(expect.anything(), 2, {
+      placeName: "新宿御苑",
+      visitedOn: "2099-12-31",
+      memo: "",
+    });
+  });
+
+  it.each([
+    ["空", "", "新宿区"],
+    ["空白だけ", "  　\t", "新宿区"],
+    ["前後に空白がある", "  新宿御苑 中央 ", "新宿御苑 中央"],
+  ])(
+    "場所名が%sなら %p を場所名にして、その行の id で確認なしに1回 updateVisit する",
+    async (_label, input, expected) => {
+      await openEdit();
+      fireEvent.changeText(form().getByLabelText("場所名"), input);
+      fireEvent.changeText(form().getByLabelText("メモ"), "庭園");
+
+      fireEvent.press(saveButton());
+      await act(async () => {});
+
+      expect(mockUpdateVisit).toHaveBeenCalledTimes(1);
+      expect(mockUpdateVisit).toHaveBeenCalledWith(expect.anything(), 2, {
+        placeName: expected,
+        visitedOn: "2026-10-18",
+        memo: "庭園",
+      });
+      expect(mockAddVisit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("保存するとフォームが閉じて履歴を読み直し、変えた行は並び順どおりの位置に移る", async () => {
+    const edited = visit({
+      id: 2,
+      visitedOn: "2026-09-01",
+      placeName: "新宿御苑 大温室",
+    });
+    mockList
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValue([rows[0], rows[2], edited]);
+    const { getPathname } = await openEdit();
+    expect(mockList).toHaveBeenCalledTimes(1);
+
+    fireEvent.changeText(form().getByLabelText("場所名"), "新宿御苑 大温室");
+    fireEvent.press(form().getByRole("button", { name: "訪問日を変更" }));
+    act(() => {
+      mockOpenPicker.mock.calls[0][0].onChange?.(
+        { type: "set", nativeEvent: { timestamp: 0, utcOffset: 540 } },
+        new Date(2026, 8, 1),
+      );
+    });
+    fireEvent.press(saveButton());
+    await act(async () => {});
+
+    expect(mockUpdateVisit).toHaveBeenCalledWith(expect.anything(), 2, {
+      placeName: "新宿御苑 大温室",
+      visitedOn: "2026-09-01",
+      memo: "",
+    });
+    expect(mockList).toHaveBeenCalledTimes(2);
+    expect(mockList).toHaveBeenLastCalledWith(expect.anything(), "13104");
+    expect(screen.queryByTestId("edit-visit-form")).toBeNull();
+    expect(places()).toEqual(["都庁", "歌舞伎町", "新宿御苑 大温室"]);
+    expect(sheet().getByText("2026年9月1日（火）")).toBeTruthy();
+    expect(getPathname()).toBe("/municipality/13104");
+    // 追記ボタンと編集ボタンが戻る
+    expect(sheet().getByRole("button", { name: "追記" })).toBeTruthy();
+    expect(editButtons()).toHaveLength(3);
+  });
+
+  it("保存の処理中に連打しても updateVisit は1回だけ", async () => {
+    let finish: () => void = () => {};
+    mockUpdateVisit.mockImplementation(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    await openEdit();
+
+    fireEvent.press(saveButton());
+    fireEvent.press(saveButton());
+    fireEvent.press(saveButton());
+    expect(mockUpdateVisit).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish());
+    expect(mockUpdateVisit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("edit-visit-form")).toBeNull();
+  });
+
+  it("保存に失敗すると日本語のエラーを alert で出し、入力を残してもう一度保存できる", async () => {
+    mockUpdateVisit.mockRejectedValueOnce(new Error("disk full"));
+    await openEdit();
+    fireEvent.changeText(form().getByLabelText("場所名"), "大温室");
+    fireEvent.changeText(form().getByLabelText("メモ"), "庭園");
+
+    fireEvent.press(saveButton());
+    await act(async () => {});
+
+    expect(form().getByRole("alert")).toHaveTextContent(
+      "保存できませんでした。もう一度お試しください。",
+    );
+    expect(form().getByLabelText("場所名").props.value).toBe("大温室");
+    expect(form().getByLabelText("メモ").props.value).toBe("庭園");
+    expect(saveButton()).toBeEnabled();
+    expect(mockList).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(saveButton());
+    await act(async () => {});
+    expect(mockUpdateVisit).toHaveBeenCalledTimes(2);
+    expect(mockUpdateVisit).toHaveBeenLastCalledWith(expect.anything(), 2, {
+      placeName: "大温室",
+      visitedOn: "2026-10-18",
+      memo: "庭園",
+    });
+    expect(screen.queryByTestId("edit-visit-form")).toBeNull();
+  });
+
+  it("キャンセルを押すと何も保存せずにフォームが閉じ、元の表示に戻る", async () => {
+    await openEdit();
+    fireEvent.changeText(form().getByLabelText("場所名"), "大温室");
+    fireEvent.changeText(form().getByLabelText("メモ"), "庭園");
+
+    fireEvent.press(form().getByRole("button", { name: "キャンセル" }));
+
+    expect(screen.queryByTestId("edit-visit-form")).toBeNull();
+    expect(mockUpdateVisit).not.toHaveBeenCalled();
+    expect(mockList).toHaveBeenCalledTimes(1);
+    expect(places()).toEqual(["都庁", "新宿御苑", "歌舞伎町"]);
+    expect(sheet().queryByText("大温室")).toBeNull();
+    expect(sheet().getByRole("button", { name: "追記" })).toBeTruthy();
+    expect(editButtons()).toHaveLength(3);
+
+    // もう一度開くと、入力は元の値に戻っている
+    fireEvent.press(editButton("2026年10月18日（日） 新宿御苑を編集"));
+    expect(form().getByLabelText("場所名").props.value).toBe("新宿御苑");
+    expect(form().getByLabelText("メモ").props.value).toBe("");
   });
 });
