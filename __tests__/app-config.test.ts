@@ -30,7 +30,7 @@ describe("app.json の土台設定", () => {
     expect(expo.platforms).toEqual(["android"]);
   });
 
-  it("applicationId は暫定値 com.tokyo49.app（確定は #29）", () => {
+  it("applicationId は com.tokyo49.app で確定（#29。変えると上書き更新もデータ引き継ぎもできなくなる）", () => {
     expect(expo.android.package).toBe("com.tokyo49.app");
   });
 });

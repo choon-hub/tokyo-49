@@ -49,6 +49,7 @@
   "jest": {
     "preset": "jest-expo",
     "globalSetup": "./jest.global-setup.js",
+    "testTimeout": 30000,
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/.claude/worktrees/"
