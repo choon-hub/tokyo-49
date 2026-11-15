@@ -8,10 +8,12 @@ type Props = {
   visit: Visit;
   /** 渡したときだけ「編集」ボタンを出す */
   onEdit?: () => void;
+  /** 渡したときだけ「削除」ボタンを出す。押すと確認なしで呼ぶ */
+  onDelete?: () => void;
 };
 
 // 区市シートの履歴1件。メモが無い訪問では、メモの行そのものを出さない。
-export function VisitHistoryItem({ visit, onEdit }: Props) {
+export function VisitHistoryItem({ visit, onEdit, onDelete }: Props) {
   const theme = useTheme();
   const date = formatJapaneseDate(visit.visitedOn);
   return (
@@ -26,23 +28,39 @@ export function VisitHistoryItem({ visit, onEdit }: Props) {
       {visit.memo !== null && (
         <Text style={[styles.memo, { color: theme.text }]}>{visit.memo}</Text>
       )}
-      {/* 行の操作。#9 で削除ボタンをここに並べる。 */}
-      {onEdit && (
+      {/* 行の操作。同じボタンが行の数だけ並ぶので、読み上げではどの訪問かを添える。 */}
+      {(onEdit || onDelete) && (
         <View style={styles.actions}>
-          <Pressable
-            role="button"
-            onPress={onEdit}
-            // 同じボタンが行の数だけ並ぶので、読み上げではどの訪問かを添える。
-            accessibilityLabel={`${date} ${visit.placeName}を編集`}
-            style={[
-              styles.actionButton,
-              { borderColor: theme.border, borderWidth: 1 },
-            ]}
-          >
-            <Text style={[styles.actionLabel, { color: theme.text }]}>
-              編集
-            </Text>
-          </Pressable>
+          {onDelete && (
+            <Pressable
+              role="button"
+              onPress={onDelete}
+              accessibilityLabel={`${date} ${visit.placeName}を削除`}
+              style={[
+                styles.actionButton,
+                { borderColor: theme.border, borderWidth: 1 },
+              ]}
+            >
+              <Text style={[styles.actionLabel, { color: theme.text }]}>
+                削除
+              </Text>
+            </Pressable>
+          )}
+          {onEdit && (
+            <Pressable
+              role="button"
+              onPress={onEdit}
+              accessibilityLabel={`${date} ${visit.placeName}を編集`}
+              style={[
+                styles.actionButton,
+                { borderColor: theme.border, borderWidth: 1 },
+              ]}
+            >
+              <Text style={[styles.actionLabel, { color: theme.text }]}>
+                編集
+              </Text>
+            </Pressable>
+          )}
         </View>
       )}
     </View>

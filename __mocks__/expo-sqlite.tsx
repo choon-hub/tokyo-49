@@ -12,3 +12,17 @@ export function SQLiteProvider({ children }: { children: ReactNode }) {
 export function useSQLiteContext() {
   return db;
 }
+
+// 辞書 DB（src/db/dict-db.ts）用。版を読めない空の辞書として振る舞い、同梱版のコピーは何もしない。
+const dictDb = {
+  async getFirstAsync() {
+    return null;
+  },
+  async closeAsync() {},
+};
+
+export async function openDatabaseAsync() {
+  return dictDb;
+}
+
+export async function importDatabaseFromAssetAsync() {}

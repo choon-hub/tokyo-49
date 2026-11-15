@@ -19,7 +19,11 @@ export default function List() {
       style={[styles.container, { backgroundColor: theme.background }]}
       testID="list-screen"
     >
-      <ConquestCount visited={visitedCount} total={MUNICIPALITIES.length} />
+      <ConquestCount
+        visited={visitedCount}
+        total={MUNICIPALITIES.length}
+        onLongPress={() => router.push("/settings")}
+      />
       {loadFailed && (
         <Text role="alert" style={[styles.error, { color: theme.text }]}>
           訪問記録を読み込めませんでした。しばらくしてからもう一度お試しください。

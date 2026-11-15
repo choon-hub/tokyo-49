@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import { findMunicipalityByCode } from "../data/municipalities";
 import { isValidDateString } from "../lib/date";
+import type { TransferVisit } from "../lib/transfer";
 
 // visits テーブルへの読み書きはこのモジュールに集める（要件書 §5.2）。
 
@@ -14,6 +15,8 @@ export type NewVisit = {
   memo: string | null;
   source: VisitSource;
   placeName: string;
+  /** 候補から選んだときの辞書の id（参考値。§5.2）。手動のときは省く */
+  refId?: number | null;
 };
 
 export type Visit = {
@@ -86,7 +89,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       input.placeName,
       input.municipalityCode,
       input.source,
-      null,
+      input.refId ?? null,
       input.visitedOn,
       normalizeMemo(input.memo),
       now,
@@ -121,6 +124,92 @@ WHERE id = ?`,
   if (result.changes === 0) {
     throw new Error(`訪問が見つかりません: ${id}`);
   }
+}
+
+/** 訪問を1行削除する。指定した id の行が無ければ拒否する。 */
+export async function deleteVisit(
+  db: SQLiteDatabase,
+  id: number,
+): Promise<void> {
+  const result = await db.runAsync("DELETE FROM visits WHERE id = ?", [id]);
+  if (result.changes === 0) {
+    throw new Error(`訪問が見つかりません: ${id}`);
+  }
+}
+
+/** インポートの取り込み方（要件書 §2.5）。 */
+export type ImportMode = "merge" | "overwrite";
+
+export type ImportResult = {
+  /** 追加した件数 */
+  added: number;
+  /** 既存と重複していて取り込まなかった件数（上書きでは常に 0） */
+  skipped: number;
+};
+
+/** 重複判定キー（placeName + municipalityCode + visitedOn）。 */
+const duplicateKey = (
+  placeName: string,
+  municipalityCode: string,
+  visitedOn: string,
+) => JSON.stringify([placeName, municipalityCode, visitedOn]);
+
+/**
+ * 検証済みの訪問を取り込む（要件書 §2.5）。検証は parseImport で済ませておく。
+ * - merge: 取り込み前からある行と重複判定キーが一致する行はスキップし、残りを追加する
+ * - overwrite: 既存の訪問をすべて削除してから、全件を追加する
+ * どちらも1トランザクションで行い、途中で失敗したら何も変わらない。
+ */
+export async function importVisits(
+  db: SQLiteDatabase,
+  visits: readonly TransferVisit[],
+  mode: ImportMode,
+): Promise<ImportResult> {
+  let added = 0;
+  let skipped = 0;
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    const existing = new Set<string>();
+    if (mode === "overwrite") {
+      await txn.runAsync("DELETE FROM visits");
+    } else {
+      const rows = await txn.getAllAsync<
+        Pick<VisitRow, "place_name" | "municipality_code" | "visited_on">
+      >("SELECT place_name, municipality_code, visited_on FROM visits");
+      for (const row of rows) {
+        existing.add(
+          duplicateKey(row.place_name, row.municipality_code, row.visited_on),
+        );
+      }
+    }
+    for (const visit of visits) {
+      if (
+        existing.has(
+          duplicateKey(visit.placeName, visit.municipalityCode, visit.visitedOn),
+        )
+      ) {
+        skipped++;
+        continue;
+      }
+      await txn.runAsync(
+        `INSERT INTO visits
+  (place_name, municipality_code, source, ref_id, visited_on, memo, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          visit.placeName,
+          visit.municipalityCode,
+          visit.source,
+          visit.refId,
+          visit.visitedOn,
+          visit.memo,
+          visit.createdAt ?? now,
+          visit.updatedAt ?? visit.createdAt ?? now,
+        ],
+      );
+      added++;
+    }
+  });
+  return { added, skipped };
 }
 
 function toVisit(row: VisitRow): Visit {

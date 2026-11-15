@@ -31,6 +31,7 @@ async function renderList() {
 }
 
 // 地図タブへ移ってから一覧に戻る（一覧にフォーカスが戻る）。
+// 地図タブも塗り分けのために集計を読むので、往復で集計は2回（地図・一覧）読まれる。
 async function leaveAndReturnToList() {
   fireEvent.press(screen.getByText("地図"));
   expect(await screen.findByTestId("map-screen")).toBeTruthy();
@@ -127,8 +128,8 @@ describe("訪問済みの表示", () => {
         { municipalityCode: "13101", visitCount: 1 },
         { municipalityCode: "13102", visitCount: 1 },
       ])
-      // 千代田区の訪問がすべて消えた後の集計
-      .mockResolvedValueOnce([{ municipalityCode: "13102", visitCount: 1 }]);
+      // 千代田区の訪問がすべて消えた後の集計（地図タブと、戻った一覧タブがそれぞれ読む）
+      .mockResolvedValue([{ municipalityCode: "13102", visitCount: 1 }]);
     renderRouter("./app", { initialUrl: "/list" });
     expect(await screen.findByText("2 / 49")).toBeTruthy();
     expect(screen.getByLabelText("千代田区 訪問済み")).toBeTruthy();
@@ -136,7 +137,7 @@ describe("訪問済みの表示", () => {
     await leaveAndReturnToList();
 
     expect(await screen.findByText("1 / 49")).toBeTruthy();
-    expect(mockCount).toHaveBeenCalledTimes(2);
+    expect(mockCount).toHaveBeenCalledTimes(3);
     expect(screen.getByLabelText("千代田区 未訪問")).toBeTruthy();
     expect(screen.getByLabelText("中央区 訪問済み")).toBeTruthy();
     expect(screen.getAllByText("✓")).toHaveLength(1);
@@ -145,6 +146,9 @@ describe("訪問済みの表示", () => {
   it("読み直している間は、前回の表示を残す", async () => {
     mockCount
       .mockResolvedValueOnce([{ municipalityCode: "13101", visitCount: 1 }])
+      // 地図タブの読み込み
+      .mockResolvedValueOnce([{ municipalityCode: "13101", visitCount: 1 }])
+      // 一覧に戻ったときの読み直し（終わらない）
       .mockReturnValueOnce(new Promise(() => {}));
     renderRouter("./app", { initialUrl: "/list" });
     expect(await screen.findByText("1 / 49")).toBeTruthy();
@@ -152,7 +156,7 @@ describe("訪問済みの表示", () => {
     await leaveAndReturnToList();
 
     expect(await screen.findByTestId("list-screen")).toBeTruthy();
-    expect(mockCount).toHaveBeenCalledTimes(2);
+    expect(mockCount).toHaveBeenCalledTimes(3);
     expect(screen.getByText("1 / 49")).toBeTruthy();
     expect(screen.getByLabelText("千代田区 訪問済み")).toBeTruthy();
   });
@@ -188,7 +192,7 @@ describe("読み込みの失敗", () => {
   it("失敗のあと、戻って読み込めればエラーは消える", async () => {
     mockCount
       .mockRejectedValueOnce(new Error("locked"))
-      .mockResolvedValueOnce([{ municipalityCode: "13101", visitCount: 1 }]);
+      .mockResolvedValue([{ municipalityCode: "13101", visitCount: 1 }]);
     renderRouter("./app", { initialUrl: "/list" });
     expect(await screen.findByRole("alert")).toBeTruthy();
 

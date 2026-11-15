@@ -1,5 +1,6 @@
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
+import { Alert } from "react-native";
 import {
   act,
   fireEvent,
@@ -12,6 +13,7 @@ import { MUNICIPALITIES } from "../src/data/municipalities";
 import {
   addVisit,
   countVisitsByMunicipality,
+  deleteVisit,
   listVisitsByMunicipality,
   updateVisit,
   type Visit,
@@ -20,6 +22,7 @@ import {
 jest.mock("../src/db/visits", () => ({
   addVisit: jest.fn(),
   countVisitsByMunicipality: jest.fn(),
+  deleteVisit: jest.fn(),
   listVisitsByMunicipality: jest.fn(),
   updateVisit: jest.fn(),
 }));
@@ -32,6 +35,7 @@ const mockAddVisit = jest.mocked(addVisit);
 const mockCount = jest.mocked(countVisitsByMunicipality);
 const mockList = jest.mocked(listVisitsByMunicipality);
 const mockUpdateVisit = jest.mocked(updateVisit);
+const mockDeleteVisit = jest.mocked(deleteVisit);
 const mockOpenPicker = jest.mocked(DateTimePickerAndroid.open);
 
 const visit = (overrides: Partial<Visit>): Visit => ({
@@ -56,6 +60,8 @@ beforeEach(() => {
   mockAddVisit.mockResolvedValue(1);
   mockUpdateVisit.mockReset();
   mockUpdateVisit.mockResolvedValue();
+  mockDeleteVisit.mockReset();
+  mockDeleteVisit.mockResolvedValue();
   mockOpenPicker.mockReset();
 });
 
@@ -121,10 +127,10 @@ describe("履歴の表示", () => {
         .map((node) => node.props.children as string),
     );
     expect(texts).toEqual([
-      ["2099年12月31日（木）", "新宿区", "未来の予定", "編集"],
-      ["2026年10月18日（日）", "新宿区", "都庁", "編集"],
-      ["2026年10月18日（日）", "新宿御苑", "編集"],
-      ["2026年10月1日（木）", "新宿区", "歌舞伎町", "編集"],
+      ["2099年12月31日（木）", "新宿区", "未来の予定", "削除", "編集"],
+      ["2026年10月18日（日）", "新宿区", "都庁", "削除", "編集"],
+      ["2026年10月18日（日）", "新宿御苑", "削除", "編集"],
+      ["2026年10月1日（木）", "新宿区", "歌舞伎町", "削除", "編集"],
     ]);
     // メモの無い訪問に、空の行や「null」を出さない
     expect(sheet().queryByText(/null/)).toBeNull();
@@ -147,7 +153,7 @@ describe("履歴の表示", () => {
     expect(sheet().queryByText("まだ訪問の記録はありません")).toBeNull();
   });
 
-  it("シートには削除の操作を置かない（ボタンは「追記」と各行の「編集」だけ）", async () => {
+  it("シートのボタンは「追記」と、各行の「削除」「編集」だけ", async () => {
     mockList.mockResolvedValue([
       visit({ id: 2, memo: "都庁" }),
       visit({ id: 1, visitedOn: "2026-10-01" }),
@@ -158,18 +164,126 @@ describe("履歴の表示", () => {
       sheet()
         .queryAllByRole("button")
         .map((node) => within(node).getByText(/./).props.children as string),
-    ).toEqual(["追記", "編集", "編集"]);
-    expect(sheet().queryByText(/削除/)).toBeNull();
+    ).toEqual(["追記", "削除", "編集", "削除", "編集"]);
+  });
+});
 
-    // 追記フォームを開いても、削除の操作は出ない
+describe("削除", () => {
+  const deleteButtons = () =>
+    sheet().queryAllByRole("button", { name: /を削除$/ });
+
+  beforeEach(() => {
+    mockList.mockResolvedValue([
+      visit({ id: 3, placeName: "都庁", memo: "展望室" }),
+      visit({ id: 2, placeName: "新宿御苑" }),
+      visit({ id: 1, placeName: "歌舞伎町", visitedOn: "2026-10-01" }),
+    ]);
+    mockCount.mockResolvedValue([{ municipalityCode: "13104", visitCount: 3 }]);
+  });
+
+  it("各行に、訪問日と場所名を読み上げラベルに含む「削除」ボタンがある", async () => {
+    await openFromList("新宿区 訪問済み");
+
+    expect(
+      deleteButtons().map((node) => node.props.accessibilityLabel),
+    ).toEqual([
+      "2026年10月18日（日） 都庁を削除",
+      "2026年10月18日（日） 新宿御苑を削除",
+      "2026年10月1日（木） 歌舞伎町を削除",
+    ]);
+  });
+
+  it("押すと確認なしで、その行の id で1回 deleteVisit し、履歴を読み直す（シートは開いたまま）", async () => {
+    const alert = jest.spyOn(Alert, "alert");
+    const { getPathname } = await openFromList("新宿区 訪問済み");
+    expect(mockList).toHaveBeenCalledTimes(1);
+    mockList.mockResolvedValue([
+      visit({ id: 3, placeName: "都庁", memo: "展望室" }),
+      visit({ id: 1, placeName: "歌舞伎町", visitedOn: "2026-10-01" }),
+    ]);
+
+    fireEvent.press(
+      sheet().getByRole("button", {
+        name: "2026年10月18日（日） 新宿御苑を削除",
+      }),
+    );
+    await act(async () => {});
+
+    expect(alert).not.toHaveBeenCalled();
+    expect(mockDeleteVisit).toHaveBeenCalledTimes(1);
+    expect(mockDeleteVisit).toHaveBeenCalledWith(expect.anything(), 2);
+    expect(mockList).toHaveBeenCalledTimes(2);
+    expect(sheet().getAllByTestId("visit-history-item")).toHaveLength(2);
+    expect(sheet().queryByText("新宿御苑")).toBeNull();
+    expect(getPathname()).toBe("/municipality/13104");
+    expect(sheet().queryByRole("alert")).toBeNull();
+    alert.mockRestore();
+  });
+
+  it("唯一の履歴を削除すると記録なしの表示になり、シートを閉じると一覧で未訪問に戻って制覇数が減る", async () => {
+    mockList.mockResolvedValue([visit({ id: 7 })]);
+    mockCount.mockResolvedValue([{ municipalityCode: "13104", visitCount: 1 }]);
+    await openFromList("新宿区 訪問済み");
+
+    mockList.mockResolvedValue([]);
+    mockCount.mockResolvedValue([]);
+    fireEvent.press(deleteButtons()[0]);
+    await act(async () => {});
+
+    expect(mockDeleteVisit).toHaveBeenCalledWith(expect.anything(), 7);
+    expect(sheet().getByText("まだ訪問の記録はありません")).toBeTruthy();
+
+    act(() => router.back());
+    expect(await screen.findByText("0 / 49")).toBeTruthy();
+    expect(screen.getByLabelText("新宿区 未訪問")).toBeTruthy();
+  });
+
+  it("処理中に連打しても deleteVisit は1回だけ", async () => {
+    let finish: () => void = () => {};
+    mockDeleteVisit.mockImplementation(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    await openFromList("新宿区 訪問済み");
+
+    fireEvent.press(deleteButtons()[0]);
+    fireEvent.press(deleteButtons()[0]);
+    fireEvent.press(deleteButtons()[1]);
+    expect(mockDeleteVisit).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish());
+    expect(mockDeleteVisit).toHaveBeenCalledTimes(1);
+  });
+
+  it("削除に失敗したら日本語のエラーを alert で出し、行は残る", async () => {
+    mockDeleteVisit.mockRejectedValueOnce(new Error("disk I/O error"));
+    await openFromList("新宿区 訪問済み");
+
+    fireEvent.press(deleteButtons()[0]);
+    await act(async () => {});
+
+    expect(sheet().getByRole("alert")).toHaveTextContent(
+      "削除できませんでした。もう一度お試しください。",
+    );
+    expect(sheet().getAllByTestId("visit-history-item")).toHaveLength(3);
+
+    // もう一度押して成功すれば、エラーは消える
+    fireEvent.press(deleteButtons()[0]);
+    await act(async () => {});
+    expect(mockDeleteVisit).toHaveBeenCalledTimes(2);
+    expect(sheet().queryByRole("alert")).toBeNull();
+  });
+
+  it("追記・編集のフォームを開いている間は、削除ボタンを出さない", async () => {
+    await openFromList("新宿区 訪問済み");
+
     fireEvent.press(sheet().getByRole("button", { name: "追記" }));
-    expect(sheet().queryByText(/削除/)).toBeNull();
+    expect(deleteButtons()).toHaveLength(0);
 
-    // 編集フォームを開いても、削除の操作は出ない
     fireEvent.press(sheet().getByRole("button", { name: "キャンセル" }));
+    expect(deleteButtons()).toHaveLength(3);
     fireEvent.press(sheet().getAllByRole("button", { name: /を編集$/ })[0]);
     expect(screen.getByTestId("edit-visit-form")).toBeTruthy();
-    expect(sheet().queryByText(/削除/)).toBeNull();
+    expect(deleteButtons()).toHaveLength(0);
   });
 });
 
@@ -503,7 +617,9 @@ describe("編集", () => {
     sheet()
       .getAllByTestId("visit-history-item")
       .forEach((item) => {
-        expect(within(item).getByRole("button")).toHaveTextContent("編集");
+        expect(
+          within(item).getByRole("button", { name: /を編集$/ }),
+        ).toHaveTextContent("編集");
       });
   });
 
