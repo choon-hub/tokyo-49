@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useSQLiteContext } from "expo-sqlite";
+import { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddVisitForm } from "../../src/components/AddVisitForm";
@@ -9,11 +10,11 @@ import {
   findMunicipalityByCode,
   type Municipality,
 } from "../../src/data/municipalities";
+import { deleteVisit } from "../../src/db/visits";
 import { useMunicipalityVisits } from "../../src/hooks/use-municipality-visits";
 import { useTheme } from "../../theme/use-theme";
 
-// 区市の詳細（ボトムシート）。訪問履歴の閲覧・追記・編集ができる。
-// 削除は #9 でこのシートに足す。
+// 区市の詳細（ボトムシート）。訪問履歴の閲覧・追記・編集・削除ができる。
 export default function MunicipalitySheet() {
   const theme = useTheme();
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -48,6 +49,26 @@ function VisitHistory({ municipality }: { municipality: Municipality }) {
   );
   const [openForm, setOpenForm] = useState<OpenForm>({ kind: "none" });
   const closeForm = () => setOpenForm({ kind: "none" });
+  const db = useSQLiteContext();
+  const [deleteFailed, setDeleteFailed] = useState(false);
+  // 削除の処理中に同じ行や別の行を連打しても、1件ずつ処理する。
+  const deletingRef = useRef(false);
+
+  // 確認なしで即時に削除する（取り消しはできない。要件書 §2.3）。
+  const handleDelete = async (id: number) => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleteFailed(false);
+    try {
+      await deleteVisit(db, id);
+    } catch {
+      setDeleteFailed(true);
+    } finally {
+      deletingRef.current = false;
+      // 失敗したときも、実際の状態に合わせて読み直す。
+      reload();
+    }
+  };
 
   // 保存してもシートのフォーカスは変わらないので、履歴は自分で読み直す。
   // フォームは閉じる（アンマウントで入力もリセットされる）が、シートは開いたまま。
@@ -85,6 +106,11 @@ function VisitHistory({ municipality }: { municipality: Municipality }) {
           訪問記録を読み込めませんでした。しばらくしてからもう一度お試しください。
         </Text>
       )}
+      {deleteFailed && (
+        <Text role="alert" style={[styles.message, { color: theme.text }]}>
+          削除できませんでした。もう一度お試しください。
+        </Text>
+      )}
       {visits !== null && visits.length === 0 && (
         <Text style={[styles.message, { color: theme.textSecondary }]}>
           まだ訪問の記録はありません
@@ -109,6 +135,11 @@ function VisitHistory({ municipality }: { municipality: Municipality }) {
                 onEdit={
                   openForm.kind === "none"
                     ? () => setOpenForm({ kind: "edit", id: visit.id })
+                    : undefined
+                }
+                onDelete={
+                  openForm.kind === "none"
+                    ? () => void handleDelete(visit.id)
                     : undefined
                 }
               />

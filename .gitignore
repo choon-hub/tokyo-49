@@ -45,3 +45,6 @@ coverage/
 .claude/settings.local.json
 .claude/worktrees/
 CLAUDE.local.md
+
+# 辞書・地図の元データ（scripts/build-data/download.mjs が取得する）
+scripts/build-data/.cache/

@@ -1,7 +1,17 @@
-import { fireEvent, renderRouter, screen } from "expo-router/testing-library";
+import {
+  act,
+  fireEvent,
+  renderRouter,
+  screen,
+} from "expo-router/testing-library";
 import * as RN from "react-native";
 
 import { darkPalette, lightPalette } from "../theme/palette";
+
+// ホーム（地図タブ）が開くと訪問の集計を読むので、DB には触れさせない。
+jest.mock("../src/db/visits", () => ({
+  countVisitsByMunicipality: jest.fn().mockResolvedValue([]),
+}));
 
 describe("未マッチ画面", () => {
   it("存在しないパスで日本語の画面が出て、英語の既定画面は出ない", async () => {
@@ -42,5 +52,7 @@ describe("未マッチ画面", () => {
     fireEvent.press(await screen.findByText("ホームへ戻る"));
     expect(getPathname()).toBe("/");
     expect(screen.queryByText("ページが見つかりません")).toBeNull();
+    // 地図タブの集計の読み込みが終わるまで待つ
+    await act(async () => {});
   });
 });
